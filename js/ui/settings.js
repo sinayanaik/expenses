@@ -1,7 +1,8 @@
-// Settings: sign-in, sync status, install & share, payment methods, categories, learned rules,
+// Settings: sync connection, sign-in, sync status, install & share, payment methods, categories, learned rules,
 // export / import, preferences and a parser tester.
 import { db, TABLES, LOCAL_ONLY, saveRow, softDelete, liveRows, getMeta, setMeta, dirtyCount } from '../db.js';
-import { configured, sendCode, verifyCode, signOut, currentUser } from '../supabase.js';
+import { configured, sendCode, verifyCode, signOut, currentUser,
+         getConnection, checkConnection, testConnection, saveConnection, forgetConnection } from '../supabase.js';
 import { syncNow } from '../sync.js';
 import { parseSms } from '../parser/parse.js';
 import { matchPaymentMethod, suggestCategory, fingerprint } from '../parser/resolve.js';
@@ -22,6 +23,7 @@ export async function showSettings() {
     currentUser(), liveRows('payment_methods'), liveRows('categories'), liveRows('merchant_rules'), getMeta('keepRawSms', true)]);
   categories.sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
   mount(root,
+    connection(user),
     account(user),
     h('section', { class: 'card', id: 'sync-box' }),
     installCard(),
@@ -38,14 +40,81 @@ export async function showSettings() {
   paintSync();
 }
 
+// ---- Sync connection ---------------------------------------------------------
+// The Supabase URL and key are entered here on each device and stay in this browser only.
+
+const PRIVATE_NOTE = 'Stored only in this browser on this device. It is never synced, never included in exports, ' +
+                     'and is not part of the app’s files. Enter it once on each device.';
+
+function connection(user) {
+  const c = getConnection();
+  if (!c) return connectionForm();
+  const mask = k => k.length > 14 ? `${k.slice(0, 8)}…${k.slice(-4)}` : '••••••••';
+  const card = h('section', { class: 'card' },
+    h('h3', {}, 'Sync connection'),
+    h('p', { class: 'muted' }, PRIVATE_NOTE),
+    h('dl', { class: 'kv' }, h('dt', {}, 'Project URL'), h('dd', {}, c.url), h('dt', {}, 'Public key'), h('dd', {}, mask(c.key))),
+    h('div', { class: 'row gap wrap' },
+      user ? h('p', { class: 'muted' }, 'Sign out to change the connection.')
+           : h('button', { onclick: () => card.replaceWith(connectionForm(c)) }, 'Change'),
+      h('button', { class: 'danger', onclick: () => disconnect(user) }, 'Remove from this device')));
+  return card;
+}
+
+function connectionForm(current = null) {
+  const url = h('input', { type: 'url', name: 'supabase-url', required: true, value: current?.url ?? '',
+                           placeholder: 'https://abcd1234.supabase.co', autocomplete: 'off', spellcheck: 'false' });
+  const key = h('input', { type: 'password', name: 'supabase-key', required: !current, autocomplete: 'off', spellcheck: 'false',
+                           placeholder: current ? 'Leave empty to keep the saved key' : 'anon / publishable key' });
+  const show = h('input', { type: 'checkbox', onchange: e => { key.type = e.target.checked ? 'text' : 'password'; } });
+  const status = h('p', { class: 'error', hidden: true });
+  const fail = msg => { status.textContent = msg; status.hidden = false; };
+  const form = h('form', { class: 'form flat', onsubmit: async e => {
+    e.preventDefault();
+    status.hidden = true;
+    let c;
+    try { c = checkConnection(url.value, key.value || current?.key || ''); } catch (err) { return fail(err.message); }
+    try {
+      await testConnection(c);
+    } catch (err) {
+      if (!(err instanceof TypeError)) return fail(err.message);               // the project answered: wrong URL or key
+      if (!confirm('Could not reach the project (offline?). Save the connection anyway?')) return;
+    }
+    saveConnection(c);
+    toast('Connection saved on this device');
+    location.reload();                       // start the sync client with the new connection
+  } },
+    h('h3', {}, current ? 'Change sync connection' : 'Connect sync'),
+    h('p', { class: 'muted' }, 'To share one ledger between your phone and laptop, create a Supabase project and paste its ',
+      h('strong', {}, 'Project URL'), ' and ', h('strong', {}, 'anon / publishable key'),
+      ' (Supabase → Project Settings → API). Never use the secret / service_role key.'),
+    h('label', {}, h('span', {}, 'Project URL'), url),
+    h('label', {}, h('span', {}, 'Public key'), key),
+    h('label', { class: 'check' }, show, ' Show key'),
+    h('p', { class: 'muted' }, PRIVATE_NOTE),
+    status,
+    h('div', { class: 'actions' },
+      current && h('button', { type: 'button', onclick: () => showSettings() }, 'Cancel'),
+      h('button', { class: 'primary' }, current ? 'Save' : 'Save & connect')));
+  return h('section', { class: 'card' }, form);
+}
+
+async function disconnect(user) {
+  if (user) {                                // signed in: also sign out and clear this device's copy
+    const waiting = await dirtyCount();
+    if (!confirm((waiting ? `${waiting} change(s) have not synced yet and will be lost. ` : '') +
+                 'Remove the connection, sign out and clear the data stored on this device? It stays in your Supabase project.')) return;
+    await signOut();
+    await db.delete();
+  } else if (!confirm('Remove the sync connection from this device? Your entries on this device stay.')) return;
+  forgetConnection();
+  location.reload();
+}
+
 // ---- Account ---------------------------------------------------------------
 
 function account(user) {
-  if (!configured) {
-    return h('section', { class: 'card' }, h('h3', {}, 'Sync is off'),
-      h('p', { class: 'muted' }, 'Everything is saved on this device. To share one ledger between your phone and laptop, ' +
-        'create a Supabase project and fill in js/config.js (see README.md).'));
-  }
+  if (!configured) return null;              // the connection card above explains what to do
   if (user) {
     return h('section', { class: 'card' }, h('h3', {}, 'Account'),
       h('p', {}, 'Signed in as ', h('strong', {}, user.email)),

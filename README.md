@@ -15,8 +15,8 @@ python3 -m http.server 8000      # any static server works
 # open http://localhost:8000
 ```
 
-The app runs **local-only** until `js/config.js` is filled in. Parsing, saving,
-the List and Stats screens and export all work without an account.
+The app runs **local-only** until you connect it to Supabase in **Settings → Connect sync**.
+Parsing, saving, the List and Stats screens and export all work without an account.
 
 Parser tests: open `http://localhost:8000/tests/parser.html`, or run
 `node tests/run.mjs`.
@@ -28,13 +28,24 @@ Parser tests: open `http://localhost:8000/tests/parser.html`, or run
 3. In **Authentication → Email Templates → Magic Link**, put `{{ .Token }}` in the
    body so the email carries a 6-digit code. A code avoids a magic link opening
    in the browser instead of the installed app.
-4. Copy the project URL and the anon / publishable key from **Project Settings → API**
-   into [`js/config.js`](js/config.js). Never use the `service_role` / secret key here.
-5. Deploy and sign in with your email on each device.
+4. Deploy the app. On each device, open **Settings → Connect sync** and paste the
+   **Project URL** and the **anon / publishable key** from Supabase → Project Settings → API.
+   The app checks them against your project before saving, and refuses a
+   `service_role` / secret key.
+5. Sign in with your email on each device.
 6. After you have created your account, turn off **Allow new users to sign up**
    in Supabase Auth settings.
 
 You can check Row Level Security by signing in with a second email: its list should be empty.
+
+**Where the keys live:** the URL and key are kept only in that browser's
+`localStorage` on that device. They are not in the repo, the app's files,
+IndexedDB, the JSON/CSV export or the sync. To change them, sign out, then use
+**Change** in the *Sync connection* card. **Remove from this device** deletes
+them; if you were signed in, it also signs out and clears that device's copy
+of your data. The anon key is still a public key that the browser sends with
+every request, so anyone using that device's browser could read it. Row Level
+Security is what protects your data.
 
 ## Deploy
 
@@ -62,8 +73,7 @@ index.html, css/app.css      app shell + bottom tabs (Add, List, Stats, Settings
 manifest.webmanifest         install + Android share target (opens ./?text=…)
 sw.js                        offline cache
 js/app.js                    boot, tab routing, share / Ctrl+V paste handling
-js/config.js                 Supabase URL + public key
-js/supabase.js               client + email-code login
+js/supabase.js               sync connection (kept in this device's localStorage) + email-code login
 js/db.js                     IndexedDB tables (Dexie), saveRow, stableId
 js/seed.js                   starter categories + first card; re-keys signed-out rows on first sign-in
 js/sync.js                   push dirty rows, then pull rows newer than the last pull

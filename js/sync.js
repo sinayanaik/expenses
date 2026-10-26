@@ -100,6 +100,6 @@ export function startAutoSync() {
   addEventListener('online', () => syncNow());
   document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && syncNow());
   setInterval(() => document.visibilityState === 'visible' && syncNow(), 5 * 60 * 1000);
-  supabase.auth.onAuthStateChange(evt => evt === 'SIGNED_IN' && syncNow());
+  supabase?.auth.onAuthStateChange(evt => evt === 'SIGNED_IN' && syncNow());
   syncNow();
 }

@@ -235,3 +235,9 @@ dialog .card { margin: 0; border: 0; }
   padding: 10px 16px; border-radius: 10px; font-size: 14px;
   max-width: calc(100vw - 32px); box-shadow: 0 4px 16px rgb(0 0 0 / .2);
 }
+
+/* Sync connection */
+.form.flat { padding: 0; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 8px 0 12px; font-size: 14px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; word-break: break-all; font-family: ui-monospace, monospace; }
