@@ -1,4 +1,4 @@
-// Settings: sign-in, sync status, payment methods, categories, learned rules,
+// Settings: sign-in, sync status, install & share, payment methods, categories, learned rules,
 // export / import, preferences and a parser tester.
 import { db, TABLES, LOCAL_ONLY, saveRow, softDelete, liveRows, getMeta, setMeta, dirtyCount } from '../db.js';
 import { configured, sendCode, verifyCode, signOut, currentUser } from '../supabase.js';
@@ -6,6 +6,7 @@ import { syncNow } from '../sync.js';
 import { parseSms } from '../parser/parse.js';
 import { matchPaymentMethod, suggestCategory, fingerprint } from '../parser/resolve.js';
 import { h, $, mount, toast, download, formDialog } from './dom.js';
+import { installCard } from './install.js';
 
 let lastStatus = null;
 addEventListener('sync-status', e => { lastStatus = e.detail; paintSync(); });
@@ -23,6 +24,7 @@ export async function showSettings() {
   mount(root,
     account(user),
     h('section', { class: 'card', id: 'sync-box' }),
+    installCard(),
     methodsSection(methods),
     categoriesSection(categories),
     rulesSection(rules, categories),

@@ -42,8 +42,12 @@ Push to GitHub and enable **Settings → Pages** (deploy from the branch root).
 Netlify or Cloudflare Pages also work if you drag the folder in. A PWA needs
 HTTPS to install, and all three hosts provide it.
 
-- **Android:** open the site in Chrome → *Install app*. The app then shows up in the
-  share sheet, so you can share an SMS from Messages straight into it.
+- **Android:** open the site in Chrome → *Install app* (the Add screen also offers an
+  *Install app* button). The installed app then shows up in the share sheet: in
+  Messages, long-press an SMS → Share → *Expenses*, and it opens as a draft ready
+  to save. If the app is already open, the share is added to the screen without
+  reloading it, so unsaved drafts stay. Sharing works offline too, because the
+  service worker serves the app shell.
 - **iPhone:** Safari → Share → *Add to Home Screen*. iOS has no web share target,
   so you copy the SMS and tap *Paste from clipboard*.
 

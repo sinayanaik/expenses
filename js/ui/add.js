@@ -5,6 +5,7 @@ import { owner } from '../supabase.js';
 import { parseSms, splitMessages, merchantKey } from '../parser/parse.js';
 import { matchPaymentMethod, suggestCategory, fingerprint } from '../parser/resolve.js';
 import { h, $, money, today, toast } from './dom.js';
+import { installCard } from './install.js';
 
 let drafts = [];                             // cards waiting on the Add screen
 let ctx = { methods: [], categories: [], rules: [] };
@@ -39,6 +40,7 @@ function build(root) {
         navigator.clipboard?.readText && h('button', { class: 'primary', onclick: fromClipboard }, 'Paste from clipboard'),
         h('button', { onclick: readBox }, 'Read text'),
         h('button', { onclick: addManual }, '+ Add manually'))),
+    installCard({ compact: true }),
     h('div', { id: 'drafts' }),
     h('div', { id: 'save-all', class: 'save-all', hidden: true },
       h('button', { class: 'primary wide', onclick: saveAll }, 'Save all')));

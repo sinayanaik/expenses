@@ -26,10 +26,29 @@ document.getElementById('sync-pill').addEventListener('click', () => go('setting
 await ensureSeed(await owner());             // starter categories + your first card, once per device
 
 // Opened from the Android share sheet: ./?text=Rs.1,002.00 spent on...
-const params = new URLSearchParams(location.search);
-const shared = params.get('text') || params.get('title');
+// Messaging apps put the SMS in `text`; some use `title`, or split a link off into `url`.
+function sharedText(params) {
+  const [title, text, url] = ['title', 'text', 'url'].map(k => (params.get(k) || '').trim());
+  const body = text || title;
+  return url && !body.includes(url) ? `${body} ${url}`.trim() : body;
+}
+const launchedAt = location.href;
+const shared = sharedText(new URLSearchParams(location.search));
 await go('add');
-if (shared) { parseIntoDrafts(shared); history.replaceState(null, '', './'); }
+if (shared) {
+  history.replaceState(null, '', './');      // a reload must not add the same SMS again
+  parseIntoDrafts(shared);
+}
+
+// Shared while the app is already open: the manifest's launch_handler (focus-existing)
+// brings this window forward instead of reloading it, so unsaved drafts stay put
+window.launchQueue?.setConsumer(({ targetURL }) => {
+  if (!targetURL || targetURL === launchedAt) return;   // the launch handled just above
+  const text = sharedText(new URL(targetURL).searchParams);
+  if (!text) return;
+  if (current !== 'add') go('add');
+  parseIntoDrafts(text);
+});
 
 // Laptop: Ctrl+V anywhere on the Add screen parses immediately
 document.addEventListener('paste', e => {

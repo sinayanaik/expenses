@@ -161,6 +161,9 @@ details.sms p, .notice .sms { white-space: pre-wrap; word-break: break-word; mar
 .notice strong { color: var(--text); }
 .notice .sms { font-size: 13px; }
 
+.install p { margin: 0 0 8px; }
+.install .actions { margin-top: 4px; }
+
 .save-all {
   position: sticky; bottom: calc(var(--tabs-h) + env(safe-area-inset-bottom) + 8px);
   padding: 8px 0;
