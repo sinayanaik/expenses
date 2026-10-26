@@ -8,13 +8,12 @@ import { parseSms } from '../parser/parse.js';
 import { matchPaymentMethod, suggestCategory, fingerprint } from '../parser/resolve.js';
 import { h, $, mount, toast, download, formDialog } from './dom.js';
 import { installCard } from './install.js';
+import { TYPES, editMethod } from './pickers.js';
 
 let lastStatus = null;
 addEventListener('sync-status', e => { lastStatus = e.detail; paintSync(); });
 addEventListener('data-changed', () => paintSync());
 
-const TYPES = [['credit_card', 'Credit card'], ['debit_card', 'Debit card'], ['bank_account', 'Bank account'],
-               ['upi', 'UPI'], ['wallet', 'Wallet'], ['cash', 'Cash']];
 const KINDS = [['expense', 'Expense'], ['income', 'Income'], ['transfer', 'Transfer']];
 
 export async function showSettings() {
@@ -174,24 +173,7 @@ async function paintSync() {
 // ---- Payment methods, categories, rules -------------------------------------
 
 function methodsSection(methods) {
-  const edit = async (m = {}) => {
-    const v = await formDialog(m.id ? 'Edit payment method' : 'New payment method', [
-      { name: 'name', label: 'Name', required: true, placeholder: 'SBI Credit Card' },
-      { name: 'type', label: 'Type', type: 'select', options: TYPES },
-      { name: 'bank', label: 'Bank (as the parser names it)', placeholder: 'SBI, HDFC, ICICI, Axis…' },
-      { name: 'last4', label: 'Last 4 digits', inputmode: 'numeric', maxlength: 4, pattern: '\\d{4}' },
-      { name: 'keywords', label: 'Extra keywords in its SMS (comma separated)', placeholder: 'sbicard' },
-      { name: 'is_default', label: 'Default for manual entries', type: 'checkbox' },
-      { name: 'archived', label: 'Archived (hidden from pickers)', type: 'checkbox' },
-    ], { type: 'credit_card', ...m, keywords: (m.keywords || []).join(', ') });
-    if (!v) return;
-    const row = await saveRow('payment_methods', { ...m, ...v, bank: v.bank || null, last4: v.last4 || null,
-      keywords: v.keywords.split(',').map(k => k.trim()).filter(Boolean) });
-    if (row.is_default) {                     // only one default
-      for (const o of methods) if (o.id !== row.id && o.is_default) await saveRow('payment_methods', { id: o.id, is_default: false });
-    }
-    showSettings();
-  };
+  const edit = async (m = {}) => { if (await editMethod(m)) showSettings(); };
   return listSection('Payment methods', methods, m => [
     m.name + (m.is_default ? ' · default' : '') + (m.archived ? ' · archived' : ''),
     [TYPES.find(([t]) => t === m.type)?.[1], m.bank, m.last4 && '••' + m.last4].filter(Boolean).join(' · '),

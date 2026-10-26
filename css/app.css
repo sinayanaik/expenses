@@ -241,3 +241,56 @@ dialog .card { margin: 0; border: 0; }
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 8px 0 12px; font-size: 14px; }
 .kv dt { color: var(--muted); }
 .kv dd { margin: 0; word-break: break-all; font-family: ui-monospace, monospace; }
+
+/* Card fields that hold more than one control (same look as a label) */
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--muted); min-width: 0; }
+.field > span { display: block; }
+.wide { grid-column: 1 / -1; }
+.row.gap > select { flex: 1; min-width: 0; width: auto; }
+.mini { min-height: 42px; padding: 6px 12px; font-size: 14px; flex-shrink: 0; }
+.field .chip.new { margin-top: 8px; }
+.field > input[hidden] { display: none; }
+.field > input:not([hidden]) { margin-top: 6px; }
+
+/* Category button + search sheet */
+.picker {
+  width: 100%; min-height: 42px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center;
+  text-align: left; font-size: 16px; color: var(--text);
+}
+.picker::after { content: '▾'; color: var(--muted); margin-left: 8px; }
+.picker.empty { color: var(--muted); }
+dialog.sheet[open] { display: flex; flex-direction: column; height: min(600px, calc(100dvh - 32px)); }
+.sheet-head { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px 4px; }
+.sheet-head h3 { margin: 0; }
+.sheet-head button { min-height: 36px; border: 0; background: none; }
+.sheet > input[type="search"] { margin: 8px 14px; width: calc(100% - 28px); }
+.opts { overflow-y: auto; padding: 0 8px 12px; flex: 1; overscroll-behavior: contain; }
+.opt {
+  width: 100%; display: flex; justify-content: space-between; align-items: center; text-align: left;
+  border: 0; border-radius: 8px; background: none; min-height: 44px; padding: 8px 10px; font-size: 16px;
+}
+.opt:hover, .opt:focus-visible { background: var(--notice); }
+.opt.on { color: var(--accent); font-weight: 600; }
+.opt.add { color: var(--accent); font-weight: 600; }
+.opt.none { color: var(--muted); }
+.opt small { color: var(--muted); }
+.opt-group { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 10px 10px 2px; }
+
+/* Tags */
+.tags { display: grid; gap: 6px; }
+.tag-chips, .tag-suggest { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag-chips:empty, .tag-suggest:empty { display: none; }
+.tag {
+  display: inline-flex; align-items: center; gap: 2px; padding: 2px 2px 2px 10px; border-radius: 999px;
+  background: var(--notice); border: 1px solid var(--border); font-size: 14px; color: var(--text);
+}
+.tag button { min-height: 28px; width: 28px; padding: 0; border: 0; background: none; font-size: 18px; line-height: 1; color: var(--muted); }
+
+/* "Last time: …" strip under the merchant */
+.last-time {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 6px 6px 10px;
+  border: 1px dashed var(--accent); border-radius: 10px; background: var(--notice); font-size: 14px; color: var(--text);
+}
+.last-time[hidden] { display: none; }
+.last-time .mini { min-height: 34px; color: var(--accent); }
+.field select, .field > input { color: var(--text); font-size: 16px; }

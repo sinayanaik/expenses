@@ -4,16 +4,20 @@ import { db, saveRow, saveStable, softDelete, liveRows, live, getMeta } from '..
 import { owner } from '../supabase.js';
 import { parseSms, splitMessages, merchantKey } from '../parser/parse.js';
 import { matchPaymentMethod, suggestCategory, fingerprint } from '../parser/resolve.js';
-import { h, $, money, today, toast } from './dom.js';
+import { h, $, mount, money, today, toast } from './dom.js';
 import { installCard } from './install.js';
+import { buildHistory, lastTimeSuggestion } from '../history.js';
+import { categoryField, tagInput, editMethod } from './pickers.js';
 
 let drafts = [];                             // cards waiting on the Add screen
-let ctx = { methods: [], categories: [], rules: [] };
+let ctx = { methods: [], categories: [], rules: [], history: buildHistory([]) };
+const OTHER = '__other__';                 // the "Other… (type a name)" payment method option
 
 async function loadContext() {
-  const [methods, categories, rules] = await Promise.all(
-    ['payment_methods', 'categories', 'merchant_rules'].map(liveRows));
+  const [methods, categories, rules, txs] = await Promise.all(
+    ['payment_methods', 'categories', 'merchant_rules', 'transactions'].map(liveRows));
   ctx = {
+    history: buildHistory(txs),
     methods: methods.filter(m => !m.archived),
     categories: categories.sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name)),
     rules,
@@ -155,10 +159,18 @@ function draftCard(d, { editing = false, onDone }) {
   const tx = d.tx;
   let dir = tx.direction || 'debit';
   let categoryTouched = false;
+  let suggestion = null;                     // what the "Last time" strip would apply
+  let stripKey = '';                         // what the strip currently shows, so it is only redrawn when that changes
 
   const badge = field => d.auto[field] ? h('em', { class: `badge ${d.auto[field] === 'learned' ? 'learned' : ''}` },
                                            d.auto[field] === 'learned' ? 'learned' : 'auto') : null;
-  const dropBadge = e => e.target.closest('label, .amount-row')?.querySelector('.badge')?.remove();
+  // The "auto" badge goes as soon as you change the field yourself
+  const dropBadge = e => (e.target || e).closest('label, .field, .amount-row')?.querySelector('.badge')?.remove();
+  const stamp = fieldEl => {                 // marks a field filled by "Last time"
+    const title = fieldEl.querySelector(':scope > span');
+    title.querySelector('.badge')?.remove();
+    title.append(' ', h('em', { class: 'badge learned' }, 'last time'));
+  };
 
   const amount = h('input', { type: 'text', inputmode: 'decimal', class: 'amount', placeholder: '0.00', 'aria-label': 'Amount',
                               value: tx.amount != null ? tx.amount.toFixed(2) : '', oninput: e => { dropBadge(e); mark(); } });
@@ -166,15 +178,35 @@ function draftCard(d, { editing = false, onDone }) {
     onclick: e => { dir = v; dropBadge(e); paintDir(); } }, v === 'debit' ? 'Debit' : 'Credit'));
   const date = h('input', { type: 'date', value: tx.occurred_on || today(), onchange: dropBadge });
   const merchant = h('input', { type: 'text', value: tx.merchant || '', placeholder: 'Merchant or person',
-                                oninput: e => { dropBadge(e); mark(); }, onchange: resuggest });
-  const method = h('select', { onchange: e => { dropBadge(e); chip?.remove(); mark(); } });
-  const category = h('select', { onchange: e => { categoryTouched = true; dropBadge(e); mark(); } });
-  const notes = h('input', { type: 'text', value: tx.notes || '', placeholder: 'Optional' });
-  const tags = h('input', { type: 'text', value: (tx.tags || []).join(', '), placeholder: 'comma, separated' });
+                                oninput: e => { dropBadge(e); mark(); updateSuggestion(); },
+                                onchange: () => { resuggest(); updateSuggestion(); } });
 
+  // Payment method: pick, add, edit, or type a name that is not in the list
+  const method = h('select', { 'aria-label': 'Payment method', onchange: onMethod });
+  const methodName = h('input', { type: 'text', hidden: true, placeholder: 'Type a name, e.g. Cash or Wife’s card',
+                                  'aria-label': 'New payment method name', oninput: mark });
+  const newBtn = h('button', { type: 'button', class: 'mini', onclick: newMethod }, '+ New');
+  const editBtn = h('button', { type: 'button', class: 'mini', onclick: editSelected }, 'Edit');
   let chip = d.newMethod && !tx.payment_method_id
     ? h('button', { type: 'button', class: 'chip new', onclick: saveNewMethod }, `New: ${d.newMethod.name} · Save`)
     : null;
+
+  const category = categoryField({
+    ctx: () => ({ categories: ctx.categories, catUse: ctx.history.catUse, kind: dir === 'credit' ? 'income' : 'expense' }),
+    onPick: async () => { await loadContext(); drafts.forEach(c => c !== self && c.refresh()); },   // a new category is known everywhere
+    onChange: () => { categoryTouched = true; dropBadge(category.el); mark(); updateSuggestion(); },
+  });
+  category.value = tx.category_id || '';
+
+  const notes = h('input', { type: 'text', value: tx.notes || '', placeholder: 'Optional' });
+  const tags = tagInput({ initial: tx.tags || [], tagUse: () => ctx.history.tagUse, onChange: updateSuggestion });
+
+  const methodField = h('div', { class: 'field wide' },
+    h('span', {}, 'Payment method ', badge('payment_method_id')),
+    h('div', { class: 'row gap' }, method, newBtn, editBtn), methodName, chip);
+  const categoryFieldEl = h('div', { class: 'field' }, h('span', {}, 'Category ', badge('category_id')), category.el);
+  const tagsFieldEl = h('div', { class: 'field wide' }, h('span', {}, 'Tags'), tags.el);
+  const suggest = h('div', { class: 'last-time wide', hidden: true });
 
   const saveBtn = h('button', { class: 'primary', onclick: () => save() }, d.dup ? 'Save anyway' : 'Save');
   const el = h('div', { class: 'card draft' },
@@ -184,10 +216,11 @@ function draftCard(d, { editing = false, onDone }) {
     h('div', { class: 'grid' },
       h('label', {}, h('span', {}, 'Date ', badge('occurred_on')), date),
       h('label', {}, h('span', {}, 'Merchant ', badge('merchant')), merchant),
-      h('label', {}, h('span', {}, 'Payment method ', badge('payment_method_id')), method, chip),
-      h('label', {}, h('span', {}, 'Category ', badge('category_id')), category),
+      suggest,
+      methodField,
+      categoryFieldEl,
       h('label', {}, h('span', {}, 'Notes'), notes),
-      h('label', {}, h('span', {}, 'Tags'), tags)),
+      tagsFieldEl),
     tx.raw_sms && h('details', { class: 'sms' }, h('summary', {}, 'Original SMS'), h('p', {}, tx.raw_sms)),
     h('div', { class: 'actions' },
       editing && h('button', { class: 'danger', onclick: remove }, 'Delete'),
@@ -201,15 +234,14 @@ function draftCard(d, { editing = false, onDone }) {
     el.classList.toggle('credit', dir === 'credit');
   }
 
-  function fill(select, items, current, blank, group) {
-    select.replaceChildren(h('option', { value: '' }, blank));
-    const groups = group ? Object.groupBy(items, group) : { '': items };
-    for (const [g, rows] of Object.entries(groups)) {
-      const opts = rows.map(r => h('option', { value: r.id, selected: r.id === current }, r.name));
-      select.append(...(g ? [h('optgroup', { label: g }, opts)] : opts));
-    }
+  function fill(select, items, current, blank) {
+    select.replaceChildren(h('option', { value: '' }, blank),
+      ...items.map(r => h('option', { value: r.id, selected: r.id === current }, r.name)));
     select.value = current && items.some(r => r.id === current) ? current : '';
   }
+
+  const selectedMethodId = () => method.value && method.value !== OTHER ? method.value : null;
+  const syncMethodButtons = () => { editBtn.disabled = !selectedMethodId(); };
 
   function refresh() {
     let m = method.value || tx.payment_method_id;
@@ -218,18 +250,32 @@ function draftCard(d, { editing = false, onDone }) {
       const hit = ctx.methods.find(x => x.last4 && x.last4 === d.newMethod.last4 && x.bank === d.newMethod.bank);
       if (hit) { m = hit.id; chip?.remove(); chip = null; }
     }
-    fill(method, ctx.methods, m, '— Payment method —');
-    const KIND = { expense: 'Expense', income: 'Income', transfer: 'Transfer' };
-    fill(category, ctx.categories, category.value || tx.category_id, '— Category —', c => KIND[c.kind] || 'Other');
+    const other = method.value === OTHER;
+    fill(method, ctx.methods, other ? '' : m, '— Payment method —');
+    method.append(h('option', { value: OTHER }, 'Other… (type a name)'));
+    if (other) method.value = OTHER;
+    category.paint();
+    syncMethodButtons();
     mark();
+    updateSuggestion();
   }
 
   // Missing fields are highlighted, never blocking except the amount
   function mark() {
     amount.classList.toggle('missing', !(Number(amount.value.replace(/[,₹\s]/g, '')) > 0));
     merchant.classList.toggle('missing', !merchant.value.trim());
-    method.classList.toggle('missing', !method.value);
-    category.classList.toggle('missing', !category.value);
+    method.classList.toggle('missing', !method.value || (method.value === OTHER && !methodName.value.trim()));
+    category.el.classList.toggle('missing', !category.value);
+  }
+
+  function onMethod(e) {
+    dropBadge(e);
+    chip?.remove(); chip = null;
+    methodName.hidden = method.value !== OTHER;
+    if (method.value === OTHER) methodName.focus();
+    syncMethodButtons();
+    mark();
+    updateSuggestion();
   }
 
   // Typed or corrected merchant: suggest its category, unless you already picked one
@@ -239,20 +285,79 @@ function draftCard(d, { editing = false, onDone }) {
     const sug = suggestCategory({ merchant: name, merchantKey: merchantKey(name), direction: dir, raw: tx.raw_sms || '' },
                                 ctx.rules, ctx.categories);
     if (!sug.category) return;
-    category.value = sug.category.id;
+    category.set(sug.category.id);
     d.suggestedCategoryId = sug.category.id;
     mark();
   }
 
-  async function saveNewMethod() {
-    const m = await saveRow('payment_methods', { ...d.newMethod, keywords: [] });
-    chip.remove(); chip = null;
+  // "Last time: Groceries · SBI Credit Card · #veg  [Apply]" when this merchant was saved before
+  function updateSuggestion() {
+    const key = merchantKey(merchant.value.trim());
+    let last = key ? ctx.history.lastByMerchant.get(key) : null;
+    if (last && last.id === tx.id) last = null;
+    if (last) last = {                       // leave out a category or method that has since been deleted or archived
+      ...last,
+      category_id: ctx.categories.some(c => c.id === last.category_id) ? last.category_id : null,
+      payment_method_id: ctx.methods.some(m => m.id === last.payment_method_id) ? last.payment_method_id : null,
+    };
+    suggestion = lastTimeSuggestion(last, { category_id: category.value, payment_method_id: selectedMethodId(), tags: tags.get() });
+    const parts = suggestion && [ctx.categories.find(c => c.id === suggestion.category_id)?.name,
+                                 ctx.methods.find(m => m.id === suggestion.payment_method_id)?.name,
+                                 ...suggestion.tags.map(t => '#' + t)].filter(Boolean);
+    suggest.hidden = !parts?.length;
+    if (suggest.hidden) { stripKey = ''; return; }
+    // Redrawing while a tap is in flight (the merchant box losing focus does that) would swallow the tap
+    if (parts.join(' · ') === stripKey) return;
+    stripKey = parts.join(' · ');
+    mount(suggest,
+      h('span', {}, h('strong', {}, 'Last time: '), stripKey),
+      h('button', { type: 'button', class: 'mini', onmousedown: e => e.preventDefault(), onclick: apply }, 'Apply'));
+  }
+
+  function apply() {
+    const s = suggestion;
+    if (!s) return;
+    if (s.category_id && s.category_id !== category.value) { category.set(s.category_id); categoryTouched = true; stamp(categoryFieldEl); }
+    if (s.payment_method_id && s.payment_method_id !== selectedMethodId()) {
+      method.value = s.payment_method_id;
+      methodName.hidden = true;
+      chip?.remove(); chip = null;
+      stamp(methodField);
+    }
+    const key = list => list.map(t => t.toLowerCase()).sort().join('|');
+    if (s.tags.length && key(s.tags) !== key(tags.get())) { tags.set(s.tags); stamp(tagsFieldEl); }
+    syncMethodButtons();
+    mark();
+    updateSuggestion();
+  }
+
+  async function afterMethodChange(id) {
     await loadContext();
+    chip?.remove(); chip = null;
+    methodName.hidden = true;
     method.value = '';
-    tx.payment_method_id = m.id;
+    tx.payment_method_id = id;
     drafts.forEach(c => c !== self && c.refresh());
     refresh();
+  }
+
+  async function newMethod() {
+    const seed = chip && d.newMethod ? { ...d.newMethod, keywords: [] } : {};   // start from the card the SMS named
+    const row = await editMethod(seed);
+    if (row) await afterMethodChange(row.id);
+  }
+
+  async function editSelected() {
+    const m = ctx.methods.find(x => x.id === method.value);
+    if (!m) return;
+    const row = await editMethod(m);
+    if (row) await afterMethodChange(row.id);
+  }
+
+  async function saveNewMethod() {
+    const m = await saveRow('payment_methods', { ...d.newMethod, keywords: [] });
     toast(`Saved ${m.name}`);
+    await afterMethodChange(m.id);
   }
 
   async function save(fromSaveAll = false) {
@@ -260,13 +365,14 @@ function draftCard(d, { editing = false, onDone }) {
     if (!(amt > 0)) { if (!fromSaveAll) { amount.focus(); toast('Enter the amount'); } return false; }
     const own = await owner();
     const name = merchant.value.trim() || null;
+    const methodId = method.value === OTHER ? await methodByName(methodName.value) : selectedMethodId();
     const row = {
       ...tx,
       amount: Math.round(amt * 100) / 100, direction: dir, occurred_on: date.value || today(),
       merchant: name, merchant_key: merchantKey(name),
-      payment_method_id: method.value || null, category_id: category.value || null,
+      payment_method_id: methodId, category_id: category.value || null,
       notes: notes.value.trim() || null,
-      tags: tags.value.split(',').map(t => t.trim()).filter(Boolean),
+      tags: tags.get(),
       deleted_at: null,
     };
     let saved;
@@ -298,6 +404,18 @@ function draftCard(d, { editing = false, onDone }) {
   paintDir();
   refresh();
   return self;
+}
+
+// A payment method typed by name: reuse the one with that name, or create it (Cash -> cash, anything else -> wallet)
+async function methodByName(name) {
+  name = name.trim().replace(/\s+/g, ' ');
+  if (!name) return null;
+  const hit = (await liveRows('payment_methods')).find(m => m.name.toLowerCase() === name.toLowerCase());
+  if (hit) return hit.id;
+  const m = await saveRow('payment_methods', { name, type: /cash/i.test(name) ? 'cash' : 'wallet' });
+  await loadContext();
+  drafts.forEach(c => c.refresh());
+  return m.id;
 }
 
 // Learning step: a merchant's category (and method) is remembered, so its next SMS is filled in
