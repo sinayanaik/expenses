@@ -1,9 +1,9 @@
 const VERSION = 'v1';                      // the Pages workflow replaces this with the commit hash on deploy; bump by hand on other hosts
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
-  './js/app.js', './js/db.js', './js/seed.js', './js/supabase.js', './js/sync.js',
+  './js/app.js', './js/db.js', './js/history.js', './js/seed.js', './js/supabase.js', './js/sync.js',
   './js/parser/parse.js', './js/parser/resolve.js',
-  './js/ui/dom.js', './js/ui/install.js', './js/ui/add.js', './js/ui/list.js', './js/ui/stats.js', './js/ui/settings.js',
+  './js/ui/dom.js', './js/ui/install.js', './js/ui/pickers.js', './js/ui/add.js', './js/ui/list.js', './js/ui/stats.js', './js/ui/settings.js',
   './icons/icon.svg', './icons/icon-maskable.svg',
 ];
 

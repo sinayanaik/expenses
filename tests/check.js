@@ -3,6 +3,7 @@
 import { parseSms, splitMessages } from '../js/parser/parse.js';
 import { matchPaymentMethod, suggestCategory, fingerprint } from '../js/parser/resolve.js';
 import { FIXTURES, TEST_CATEGORIES, TEST_METHODS } from './fixtures.js';
+import { historyResults } from './history-check.js';
 
 export function resolveFixture(f) {
   const p = parseSms(f.sms);
@@ -41,5 +42,5 @@ export function runAll() {
     diffs: parts.length === 4 ? [] : [{ field: 'count', expected: 4, got: parts.length }],
     pass: parts.length === 4,
   });
-  return results;
+  return [...results, ...historyResults()];
 }

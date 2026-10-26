@@ -85,8 +85,10 @@ js/seed.js                   starter categories + first card; re-keys signed-out
 js/sync.js                   push dirty rows, then pull rows newer than the last pull
 js/parser/parse.js           SMS text -> fields
 js/parser/resolve.js         fields -> payment method, category, fingerprint
-js/ui/                       add.js, list.js, stats.js, settings.js, dom.js
+js/history.js                most-used categories and tags, last entry per merchant (pure functions)
+js/ui/                       add.js, list.js, stats.js, settings.js, dom.js, pickers.js, install.js
 tests/fixtures.js            SMS samples + expected fields
+tests/history-check.js       checks for js/history.js
 tests/parser.html, run.mjs   test runners (browser / Node)
 supabase/schema.sql          tables, triggers, RLS, report view
 ```
@@ -100,6 +102,17 @@ supabase/schema.sql          tables, triggers, RLS, report view
 - **Categories:** your learned rule for that merchant comes first, then the built-in
   keyword map (ZEPTO → Groceries), then an income guess for credits. When you save
   an entry, its merchant's category is remembered for the next SMS.
+- **Picking a category:** tap the Category field to open a search sheet. Your most-used
+  categories come first, typing filters the list, and *+ Add "name"* creates a new
+  category on the spot.
+- **Payment method on the card:** the dropdown has *+ New* and *Edit* buttons (the same
+  form as in Settings), and an *Other… (type a name)* option for a method that is not
+  in the list. A name you type is saved as a new method when you save the entry.
+- **Tags:** type a tag and press Enter or comma, or tap one of your most-used tags.
+  Earlier tags autocomplete.
+- **Last time:** when the merchant was saved before, a strip under it shows that
+  entry's category, payment method and tags with an *Apply* button. Nothing is
+  filled until you tap it.
 - **Duplicates:** the fingerprint is `date | amount | last4 | ref or merchant`. Pasting
   the same SMS again shows *Possible duplicate*, with Skip or Save anyway.
 - **Sync rules:** ids are made on the device (`crypto.randomUUID()`). Nothing is
