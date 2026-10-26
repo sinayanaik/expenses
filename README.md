@@ -49,9 +49,14 @@ Security is what protects your data.
 
 ## Deploy
 
-Push to GitHub and enable **Settings → Pages** (deploy from the branch root).
-Netlify or Cloudflare Pages also work if you drag the folder in. A PWA needs
-HTTPS to install, and all three hosts provide it.
+**GitHub Pages:** in **Settings → Pages**, set *Source* to **GitHub Actions** (once).
+After that, every push to `main` runs [`.github/workflows/static.yml`](.github/workflows/static.yml):
+it runs the parser tests, then publishes only the app files (not `tests/`, `supabase/`
+or this README) to `https://<you>.github.io/<repo>/`. You can also start it by hand from
+the **Actions** tab. Pull requests run the tests but do not deploy.
+
+Netlify or Cloudflare Pages also work if you drag the folder in (bump `VERSION` in
+`sw.js` yourself there). A PWA needs HTTPS to install, and all three hosts provide it.
 
 - **Android:** open the site in Chrome → *Install app* (the Add screen also offers an
   *Install app* button). The installed app then shows up in the share sheet: in
@@ -62,9 +67,10 @@ HTTPS to install, and all three hosts provide it.
 - **iPhone:** Safari → Share → *Add to Home Screen*. iOS has no web share target,
   so you copy the SMS and tap *Paste from clipboard*.
 
-**Bump `VERSION` in `sw.js` on every deploy.** The service worker serves the
-app shell from its cache, and a new version number is what makes phones fetch
-the new files.
+**Updates:** the service worker serves the app shell from its cache, and a new
+`VERSION` is what makes phones fetch the new files. The Pages workflow sets it to
+the commit hash on every deploy, so installed apps update by themselves the next
+time they open. The `'v1'` in the repo is only a placeholder.
 
 ## How it works
 

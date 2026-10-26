@@ -1,4 +1,4 @@
-const VERSION = 'v1';                      // bump on every deploy so phones fetch the new files
+const VERSION = 'v1';                      // the Pages workflow replaces this with the commit hash on deploy; bump by hand on other hosts
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
   './js/app.js', './js/db.js', './js/seed.js', './js/supabase.js', './js/sync.js',
