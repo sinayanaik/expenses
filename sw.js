@@ -4,7 +4,7 @@ const SHELL = [
   './js/app.js', './js/db.js', './js/seed.js', './js/supabase.js', './js/sync.js',
   './js/parser/parse.js', './js/parser/resolve.js',
   './js/ui/dom.js', './js/ui/install.js', './js/ui/add.js', './js/ui/list.js', './js/ui/stats.js', './js/ui/settings.js',
-  './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png',
+  './icons/icon.svg', './icons/icon-maskable.svg',
 ];
 
 self.addEventListener('install', e => e.waitUntil(
